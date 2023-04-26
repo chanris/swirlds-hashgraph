@@ -1,14 +1,12 @@
-package com.chenyue.consensus.hashview;
+package com.cystrix.consensus.hashview;
 
-import com.chenyue.consensus.Tx;
+import com.cystrix.consensus.Tx;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  *  在hashgraph上的事件实体

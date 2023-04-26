@@ -1,4 +1,4 @@
-package com.chenyue.exception;
+package com.cystrix.exception;
 
 public class MemberStartFailedException extends RuntimeException{
     public MemberStartFailedException() {

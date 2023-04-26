@@ -1,9 +1,6 @@
-package com.chenyue;
+package com.cystrix;
 
-import com.chenyue.client.HashgraphClient;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.cystrix.client.HashgraphClient;
 
 public class ClientApplication {
     public static void main(String[] args) {

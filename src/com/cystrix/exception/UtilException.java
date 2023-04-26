@@ -1,4 +1,4 @@
-package com.chenyue.exception;
+package com.cystrix.exception;
 
 public class UtilException extends RuntimeException{
     public UtilException() {

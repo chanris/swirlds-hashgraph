@@ -1,7 +1,6 @@
-package com.chenyue.util;
+package com.cystrix.util;
 
 import java.io.*;
-import java.util.ArrayList;
 
 /**
  * IO 工具类, 读写文件

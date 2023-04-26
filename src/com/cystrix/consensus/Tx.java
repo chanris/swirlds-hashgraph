@@ -1,4 +1,4 @@
-package com.chenyue.consensus;
+package com.cystrix.consensus;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

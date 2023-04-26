@@ -1,6 +1,6 @@
-package com.chenyue.util;
+package com.cystrix.util;
 
-import com.chenyue.consensus.hashview.Event;
+import com.cystrix.consensus.hashview.Event;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
