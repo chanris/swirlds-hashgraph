@@ -1,6 +1,5 @@
-package com.cystrix.util;
+package com.cystrix.consensus.hashview;
 
-import com.cystrix.consensus.hashview.Event;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,7 +26,6 @@ public class Graph {
 
     public Graph(ConcurrentHashMap<Integer, List<Event>> hashgraph, int numMembers) {
         this.numMembers = numMembers;
-//        this.numNodes = getMaxIdx(hashgraph) + 1;
         this.numNodes = 5000; //TODO
         this.adjList = new ArrayList<>(numNodes);
         for (int i = 0; i < numNodes; i++) {
@@ -41,49 +39,28 @@ public class Graph {
                     continue;
                 }
                 Event event = chain.get(i);
-                int selfPX, selfPY, otherPX, otherPY, selfX, selfY;
-                String selfParentCoordinate = event.getSelfParentHash();
-                String otherParentCoordinate = event.getOtherParentHash();
-                selfPX = Integer.parseInt(selfParentCoordinate.split(",")[0]);
-                selfPY = Integer.parseInt(selfParentCoordinate.split(",")[1]);
-                otherPX = Integer.parseInt(otherParentCoordinate.split(",")[0]);
-                otherPY = Integer.parseInt(otherParentCoordinate.split(",")[1]);
-                selfX = selfPX;
-                selfY = selfPY + 1;
-                this.addEdge((selfX + selfY * numMembers), (selfPX + selfPY * numMembers));
-                this.addEdge((selfX + selfY * numMembers), (otherPX + otherPY * numMembers));
+                int selfPIdx, otherPIdx, idx;
+                idx = this.getIdxByEvent(event);
+                selfPIdx = this.getIdxByCoordinateStr(event.getSelfParentHash());
+                otherPIdx = this.getIdxByCoordinateStr(event.getOtherParentHash());
+                this.addEdge(idx, selfPIdx);
+                this.addEdge(idx, otherPIdx);
             }
         });
-    }
-
-    public int getMaxIdx(HashMap<Integer, List<Event>> hashgraph) {
-        AtomicInteger coordinateY = new AtomicInteger();
-        AtomicInteger maxIdx = new AtomicInteger();
-        hashgraph.forEach((id, chain)->{
-            if (chain.size() > coordinateY.get()) {
-                coordinateY.set(chain.size());
-                maxIdx.set(id + coordinateY.get() *  numMembers);
-            }
-        });
-        return maxIdx.get();
     }
 
     public void addEdge(int src, int dest) {
-        // log.debug("添加{} -> {}的边", src, dest);
         adjList.get(src).add(dest);
         //adjList.get(dest).add(src);  // 如果是无向图，需要加上这句
     }
 
     public void removeEdgeByEven(Event event) {
-        int selfPX, selfPY, otherPX, otherPY;
-        String selfParentCoordinate = event.getSelfParentHash();
-        String otherParentCoordinate = event.getOtherParentHash();
-        selfPX = Integer.parseInt(selfParentCoordinate.split(",")[0]);
-        selfPY = Integer.parseInt(selfParentCoordinate.split(",")[1]);
-        otherPX = Integer.parseInt(otherParentCoordinate.split(",")[0]);
-        otherPY = Integer.parseInt(otherParentCoordinate.split(",")[1]);
-        this.removeEdge(selfPX + numMembers * (selfPY + 1), selfPX + numMembers * selfPY);
-        this.removeEdge(selfPX + numMembers * (selfPY + 1), otherPX + numMembers * otherPY);
+        int  crd, selfPCrd, otherPCrd;
+        crd = getIdxByEvent(event);
+        selfPCrd = getIdxByCoordinateStr(event.getSelfParentHash());
+        otherPCrd = getIdxByCoordinateStr(event.getOtherParentHash());
+        this.removeEdge(crd, selfPCrd);
+        this.removeEdge(crd, otherPCrd);
     }
 
     public void removeEdge(int src, int dest) {
@@ -99,20 +76,66 @@ public class Graph {
         return allPaths;
     }
 
-    private void dfs(int currNode, int targetNode, boolean[] visited, List<Integer> currPath, List<List<Integer>> allPaths) {
-        visited[currNode] = true;
-        currPath.add(currNode);
-        if (currNode == targetNode) {
+    // 获得路径中 目的事件的前继事件序号
+    public Integer getEventIndex(int startNodeIdx, int targetNodeIdx) {
+        List<List<Integer>>  allPaths = findAllPaths(startNodeIdx, targetNodeIdx);
+        for (List<Integer> path: allPaths) {
+            if (path.size() < 2) {
+                continue;
+            }
+            int prefixEventIdx = path.get(path.size() - 2);
+            int id = prefixEventIdx % numMembers;
+            int startNodeId = startNodeIdx % numMembers;  // 见证节点所属成员id
+            if (id == startNodeId) {
+                return prefixEventIdx;
+            }
+        }
+        return startNodeIdx;
+    }
+
+    private void dfs(int currNodeIdx, int targetNodeIdx, boolean[] visited, List<Integer> currPath, List<List<Integer>> allPaths) {
+        visited[currNodeIdx] = true;
+        currPath.add(currNodeIdx);
+        if (currNodeIdx == targetNodeIdx) {
             allPaths.add(new ArrayList<>(currPath));
         } else {
-            for (int neighbor : adjList.get(currNode)) {
+            for (int neighbor : adjList.get(currNodeIdx)) {
                 if (!visited[neighbor]) {
-                    dfs(neighbor, targetNode, visited, currPath, allPaths);
+                    dfs(neighbor, targetNodeIdx, visited, currPath, allPaths);
                 }
             }
         }
         currPath.remove(currPath.size() - 1);
-        visited[currNode] = false;
+        visited[currNodeIdx] = false;
+    }
+
+    /**
+     * 返回一个坐标， int[0] => row; int[1] => line
+     * @param e
+     * @return
+     */
+    public int[] getCoordinateByEvent(Event e) {
+        String[] crd = e.getSelfParentHash().split(",");
+        int row = Integer.parseInt(crd[0]) + 1;
+        int line = Integer.parseInt(crd[1]);
+        return new int[]{row, line};
+    }
+
+    public int getIdxByEvent(Event e) {
+        int[] crd = getCoordinateByEvent(e);
+        return crd[0] * numMembers + crd[1];
+    }
+
+    public int[] getCrdByCoordinateStr(String crdStr) {
+        String[] crd = crdStr.split(",");
+        int row = Integer.parseInt(crd[0]);
+        int line = Integer.parseInt(crd[1]);
+        return new int[]{row, line};
+    }
+
+    public int getIdxByCoordinateStr(String crdStr) {
+        int[] crd = getCrdByCoordinateStr(crdStr);
+        return crd[0] * numMembers + crd[1];
     }
 
     public static void main(String[] args) {

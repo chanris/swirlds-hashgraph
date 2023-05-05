@@ -7,6 +7,7 @@ import com.cystrix.client.HashgraphClient;
 import com.cystrix.consensus.HashgraphMember;
 import com.cystrix.consensus.Tx;
 import com.cystrix.consensus.hashview.Event;
+import com.cystrix.util.UUIDUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
@@ -15,10 +16,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,7 +45,7 @@ public class MemberServer {
 
     public void start() {
         new Thread(()->{
-            log.info("node_id: {}, node_name: {}, node_port: {}", this.member.getId(), this.member.getName(), this.port);
+            // log.info("node_id: {}, node_name: {}, node_port: {}", this.member.getId(), this.member.getName(), this.port);
             try {
                 ServerSocket serverSocket = new ServerSocket(port);
                 //log.info("[Server started]: nodeId: {}, nodeName: {}\n" , member.getId(), member.getName());
@@ -79,10 +77,10 @@ public class MemberServer {
      */
     public void autoSync() throws Exception {
         while (isRunning) {
-            int time = new Random(System.currentTimeMillis() / (this.getMember().getId() +1) + this.getMember().getId()* 1000).nextInt(5000) + 3000;
+            int time = new Random(System.currentTimeMillis() / (this.getMember().getId() +1) + this.getMember().getId()* 1000).nextInt(3000) + 1000;
             TimeUnit.SECONDS.MILLISECONDS.sleep(time); // 1~2秒钟同步一次
             if (senderId.get() != Integer.MIN_VALUE) {
-                log.info("当前自己id{}正在通信中，取消同步请求", this.member.getId());
+                // log.info("当前自己id{}正在通信中，取消同步请求", this.member.getId());
                 continue;
             }
 
@@ -99,7 +97,7 @@ public class MemberServer {
             Response response = client.sendRequest(request);
             // log.debug("node_Id:{} 收到 node_id:{} 的同步消息: {}", this.member.getId(), receiverId , response);
             if (response.getCode() != 200) {
-                log.warn("sender_id: {}, receiver_id: {} gossip sync failed: {}", this.member.getId(), receiverId, "prepare阶段失败");
+                // log.warn("sender_id: {}, receiver_id: {} gossip sync failed: {}", this.member.getId(), receiverId, "prepare阶段失败");
                 continue;
             }
             // 下标 成员Id, 内容: 平行链高度
@@ -127,7 +125,8 @@ public class MemberServer {
                 log.warn("sender_id: {}, receiver_id: {} gossip sync failed: {}", this.member.getId(), receiverId, "发送事件失败");
                 continue;
             }
-            log.info("sender_id: {}, receiver_id: {} gossip sync success!", this.member.getId(), receiverId);
+            //log.info("sender_id: {}, receiver_id: {} gossip sync success!", this.member.getId(), receiverId);
+            //log.debug("当前哈希图为：{}", this.member.getHashgraph());
         }
     }
 
@@ -143,7 +142,7 @@ public class MemberServer {
         private BufferedReader reader;  // 获得请求数据
         private PrintWriter writer; // 写回响应数据
         private  AtomicInteger senderId; // 当前谁正在向自己进行gossip sync
-        private  int maxRequestIdleTime = 60 * 2;
+        private  int maxRequestIdleTime = 10;
 
         public Task(int taskId, Socket clientSocket, HashgraphMember member, CopyOnWriteArrayList<Tx> txList,
                     AtomicInteger senderId) throws IOException {
@@ -184,7 +183,7 @@ public class MemberServer {
                 if (addedList.size() != size) {
                     // 退膛，break
                     for (Event event : addedList) {
-                        int x = Integer.parseInt(event.getSelfParentHash().split(",")[0]);
+                        int x = Integer.parseInt(event.getSelfParentHash().split(",")[1]);
                         this.member.getHashgraph().get(x).remove(event);
                         this.member.getGraph().removeEdgeByEven(event);
                     }
@@ -193,28 +192,31 @@ public class MemberServer {
                 }else {
                     // 创建新事件
                     int lastIdx = this.txList.size() - 1; // 每次最多打包十个交易
-                    log.debug("打包交易 当前收集到的交易数量:{}", this.txList.size());
-                    lastIdx = Math.min(10, lastIdx);
+                    List<Tx> packedTxList = new ArrayList<>(lastIdx+1);
+                    // log.debug("打包交易 当前收集到的交易数量:{}", this.txList.size());
                     Event e = new Event();
-                    if (lastIdx >= 0) {
-                        List<Tx> txList1 =  this.txList.subList(0, lastIdx);
-                        for (Tx tx: txList1) {
-                            this.txList.remove(tx);
-                        }
-                        e.setTxList(txList1);
+                    e.setSign(UUIDUtils.geneUUIDWithoutDash()); // 模拟签名
+                    for (int i = 0; i <= lastIdx; i++) {
+                        packedTxList.add(this.txList.get(i));
                     }
+                    this.txList.removeAll(packedTxList);
+                    e.setTxList(packedTxList);
                     e.setTimestamp(System.currentTimeMillis());
                     ConcurrentHashMap<Integer, List<Event>> hashgraph = this.member.getHashgraph();
                     int memberId = this.member.getId();
                     int len = hashgraph.get(memberId).size();
                     int otherSize = hashgraph.get(senderId).size();
-                    int x = Integer.parseInt(hashgraph.get(memberId).get(len-1).getSelfParentHash().split(",")[0]);
-                    int y = Integer.parseInt(hashgraph.get(memberId).get(len-1).getSelfParentHash().split(",")[1]) + 1;
-                    int otherX = Integer.parseInt(hashgraph.get(senderId).get(otherSize-1).getSelfParentHash().split(",")[0]);
-                    int otherY = Integer.parseInt(hashgraph.get(senderId).get(otherSize-1).getSelfParentHash().split(",")[1]) + 1;
-                    e.setSelfParentHash(x + "," + y);
-                    e.setOtherParentHash(otherX + "," + otherY);
+//                    int x = Integer.parseInt(hashgraph.get(memberId).get(len-1).getSelfParentHash().split(",")[0]);
+//                    int y = Integer.parseInt(hashgraph.get(memberId).get(len-1).getSelfParentHash().split(",")[1]) + 1;
+//                    int otherX = Integer.parseInt(hashgraph.get(senderId).get(otherSize-1).getSelfParentHash().split(",")[0]);
+//                    int otherY = Integer.parseInt(hashgraph.get(senderId).get(otherSize-1).getSelfParentHash().split(",")[1]) + 1;
+
+                    e.setSelfParentHash((len -1) + "," + memberId);
+                    e.setOtherParentHash((otherSize - 1) + "," + senderId);
                     if (this.member.addEvent(e)) {
+                        this.member.divideRounds();
+                        this.member.decideFame();
+                        this.member.findOrder();
                         response.setCode(200);
                         response.setMsg("SUCCESS");
                     }else {
@@ -272,10 +274,11 @@ public class MemberServer {
         @Override
         public void run() {
             try {
-                AtomicInteger requestIdleTime = timer();
-                while (requestIdleTime.get() < maxRequestIdleTime) {
+                AtomicInteger count = new AtomicInteger(0);
+                while (count.incrementAndGet() < maxRequestIdleTime) {
                     if (clientSocket.getInputStream().available() > 0) { // 反复读取客户端输入是否有数据，有数据马上处理
-                        timer().set(0);
+                        //log.debug("请求间隔时间刷新 {}", Thread.currentThread().getId());
+                       // log.debug("当前的线程数量 {}", Thread.activeCount());
                         Request request = getRequest(reader);
                         Response response = new Response();
                         String mapping = request.getMsg();
@@ -311,21 +314,6 @@ public class MemberServer {
             }
         }
 
-        AtomicInteger timer() {
-            AtomicInteger count = new AtomicInteger(0);
-            new Thread(()->{
-                while (count.get() < maxRequestIdleTime * 1.2) {
-                    count.incrementAndGet();
-                    try {
-                        TimeUnit.SECONDS.sleep(1);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            }).start();
-            return count;
-        }
-
         public Request getRequest(BufferedReader reader) throws IOException {
             String json = reader.readLine();
             Request request = JSONObject.parseObject(json, Request.class);
@@ -340,7 +328,7 @@ public class MemberServer {
                 reader.close();
                 writer.close();
                 clientSocket.close();
-                log.debug("client: {} 已关闭 isClosed:{} ", clientSocket, clientSocket.isClosed());
+                // log.debug("client: {} 已关闭 isClosed:{} ", clientSocket, clientSocket.isClosed());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

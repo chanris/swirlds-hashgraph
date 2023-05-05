@@ -23,25 +23,27 @@ public class Event implements Cloneable {
     private String otherParentHash; // 3,2
 
     private List<Tx> txList;
-    private long  timestamp;
-    private long consensusTimestamp; // 共识时间戳
-    private boolean isWitness; // 是否是见证人
-    private boolean isFamous;  // 见证人是否著名
-    private boolean isCommit; // 是否达成共识
+    private Long  timestamp;
+    private Long consensusTimestamp; // 共识时间戳
+    private Boolean isWitness; // 是否是见证人
+    private Boolean isFamous;  // 见证人是否著名
+    private Boolean isCommit; // 是否达成共识
 
-    private  int createdRound = Integer.MIN_VALUE; // 创建轮次
-    private  int receivedRound = Integer.MIN_VALUE; // 接收轮次
+    private  Integer createdRound = Integer.MIN_VALUE; // 创建轮次
+    private  Integer receivedRound = Integer.MIN_VALUE; // 接收轮次
+
+    private String sign;
 
     // 初始化一个平行链专用
     public Event(long timestamp, String selfParentHash) {
         this.timestamp = timestamp;
         this.selfParentHash = selfParentHash;
         this.setCreatedRound(1);
-        this.setWitness(true);
+        this.setIsWitness(true);
     }
 
     public Event clone() {
-        Event clone = null;
+        Event clone;
         try {
             clone = (Event) super.clone();
         } catch (CloneNotSupportedException e) {
@@ -55,19 +57,10 @@ public class Event implements Cloneable {
         return clone;
     }
 
-    public static void main(String[] args) throws CloneNotSupportedException {
-        //
-        Tx tx = new Tx();
-        Tx tx2 = tx.clone();
-        List<Tx> txes = new ArrayList<>();
-
-        txes.add(tx);
-        txes.add(tx2);
-
-        Event event = new Event();
-        event.setTxList(txes);
-        Event e = event.clone();
-        System.out.println(e.getTxList() == txes);
-        System.out.println(e.getTxList().get(0) == txes.get(0));
+    public String toString(){
+        String[] crdPStr = this.selfParentHash.split(",");
+        int row = Integer.parseInt(crdPStr[0]) + 1;
+        int line = Integer.parseInt(crdPStr[1]);
+        return  "(" + row + "," + line +": "+ this.isFamous + ": " + this.consensusTimestamp +")";
     }
 }
